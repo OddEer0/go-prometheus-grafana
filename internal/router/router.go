@@ -7,7 +7,6 @@ import (
 	"grafana-dashboard/internal/cache"
 	"grafana-dashboard/internal/domain/xerror"
 	"grafana-dashboard/internal/dto"
-	"grafana-dashboard/internal/metrics"
 	"grafana-dashboard/internal/middleware"
 	"io/ioutil"
 	"net/http"
@@ -33,36 +32,39 @@ func SendError(w http.ResponseWriter, err error) {
 			Message: e.Message,
 			Code:    e.Code,
 		}
+		w.WriteHeader(e.Code)
 	}
 
 	b, err := json.Marshal(res)
 	if err != nil {
+		w.WriteHeader(500)
 		_, _ = w.Write([]byte(`{"code": 500,"message": "cause marshal error"}`))
 	}
 
 	_, _ = w.Write(b)
 }
 
-func Send(w http.ResponseWriter, data any) {
+func Send(w http.ResponseWriter, code int, data any) {
 	resByte, err := json.Marshal(data)
 	if err != nil {
+		w.WriteHeader(500)
 		_, _ = w.Write([]byte(`{"code": 500,"message": "send marshal error"}`))
 	}
+	w.WriteHeader(code)
 	_, _ = w.Write(resByte)
 }
 
 func New(cache cache.Cache[struct{}]) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.LoggingMiddleware)
+	r.Use(middleware.Metrics)
 
 	r.Route("/api/v1", func(r chi.Router) {
 
 		r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-			metrics.RequestCount.WithLabelValues(r.Method, r.URL.String()).Inc()
 		})
 
 		r.Post("/link", func(w http.ResponseWriter, r *http.Request) {
-			metrics.RequestCount.WithLabelValues(r.Method, r.URL.String()).Inc()
 			var body dto.LinkDTO
 			err := Body(r, &body)
 			if err != nil {
@@ -78,14 +80,13 @@ func New(cache cache.Cache[struct{}]) *chi.Mux {
 
 			cache.Add(body.Id, struct{}{})
 
-			Send(w, dto.ResLink{
+			Send(w, 200, dto.ResLink{
 				Id:      body.Id,
 				Facture: "eer0",
 			})
 		})
 
 		r.Post("/unlink", func(w http.ResponseWriter, r *http.Request) {
-			metrics.RequestCount.WithLabelValues(r.Method, r.URL.String()).Inc()
 			var body dto.LinkDTO
 			err := Body(r, &body)
 			if err != nil {
@@ -101,7 +102,7 @@ func New(cache cache.Cache[struct{}]) *chi.Mux {
 
 			cache.Delete(body.Id)
 
-			Send(w, dto.ResLink{
+			Send(w, 200, dto.ResLink{
 				Id:      body.Id,
 				Facture: "eer0",
 			})

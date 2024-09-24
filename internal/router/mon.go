@@ -9,7 +9,7 @@ import (
 
 func NewMon() *http.ServeMux {
 	mux := http.NewServeMux()
-	prometheus.MustRegister(metrics.RequestCount)
+	prometheus.MustRegister(metrics.RequestCount, metrics.RequestDuration)
 	mux.Handle("/metrics", promhttp.Handler())
 	return mux
 }
